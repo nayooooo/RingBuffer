@@ -8,6 +8,7 @@ extern "C" {
 #include <stdint.h>
 
 #include "port_heap.h"
+#include "port_mem.h"
 
 #ifdef __cplusplus
 }
