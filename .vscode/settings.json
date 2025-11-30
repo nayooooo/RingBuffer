@@ -4,6 +4,8 @@
         "port_heap.h": "c",
         "stdint.h": "c",
         "port.h": "c",
-        "cstdlib": "c"
+        "cstdlib": "c",
+        "compare": "c",
+        "ringbuffer.h": "c"
     }
 }
