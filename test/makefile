@@ -23,7 +23,7 @@ $(TEST_DIRS): %:
 		exit 1 \
 	)
 	@echo Building test: $@
-	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $@\main.c -L$(LIB_DIR) -l$(LIB_NAME) -o $@\$@.exe
+	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $@\main.c -L$(LIB_DIR) -l$(LIB_NAME) -static -o $@\$@.exe
 	@echo Build completed: $@\$@.exe
 
 run:
@@ -37,13 +37,15 @@ run:
 		$(MAKE) $(TEST) \
 	)
 	@echo Running test: $(TEST)
+	@echo ========================================
 	@cd $(TEST) && .\$(TEST).exe
+	@echo ========================================
 
 all:
 	@for %%t in ($(TEST_DIRS)) do ( \
 		if exist "%%t\main.c" ( \
 			echo Building test: %%t && \
-			$(CC) $(CFLAGS) -I$(INCLUDE_DIR) %%t\main.c -L$(LIB_DIR) -l$(LIB_NAME) -o %%t\%%t.exe && \
+			$(CC) $(CFLAGS) -I$(INCLUDE_DIR) %%t\main.c -L$(LIB_DIR) -l$(LIB_NAME) -static -o %%t\%%t.exe && \
 			echo Build completed: %%t\%%t.exe \
 		) else ( \
 			echo Skipping %%t: main.c not found \

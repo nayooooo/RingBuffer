@@ -60,6 +60,41 @@ static int _RingBufferOutUnlock(RingBuffer *rb)
     return RB_OK;
 }
 
+static int RingBufferModeSwitchTo(RingBuffer *rb, RingBufferMode mode)
+{
+    if (rb == nullptr) {
+        return RB_ERROR_PARAM;
+    }
+    if (mode >= RINGBUFFER_MODE_MAX) {
+        return RB_ERROR_INVALID;
+    }
+    if (rb->mode == mode) {
+        return RB_OK;
+    }
+
+    switch (rb->mode) {
+        case RINGBUFFER_INVALID_MODE:
+        {
+            rb->mode = mode;
+            break;
+        }
+        case RINGBUFFER_CPU_MODE:
+        {
+            rb->mode = mode;
+            break;
+        }
+        case RINGBUFFER_DMA_MODE:
+        {
+            rb->mode = mode;
+            break;
+        }
+        default:
+            return RB_ERROR;
+    }
+
+    return RB_OK;
+}
+
 #if RINGBUFFER_USE_DMA_MODE
 
 static void _RingBufferDMAModeUpdateLen(RingBuffer *rb)
@@ -142,7 +177,7 @@ int RingBufferInit(RingBuffer *rb, uint8_t *buff, uint32_t size)
     rb->inLock = 0;
     rb->outLock = 0;
 
-    RingBufferModeSwitchTo(rb, RINGBUFFER_CPU_MODE);
+    return RingBufferModeSwitchTo(rb, RINGBUFFER_CPU_MODE);
 }
 
 int RingBufferDeinit(RingBuffer *rb)
@@ -166,42 +201,7 @@ int RingBufferDeinit(RingBuffer *rb)
     rb->inLock = 0;
     rb->outLock = 0;
 
-    RingBufferModeSwitchTo(rb, RINGBUFFER_INVALID_MODE);
-}
-
-int RingBufferModeSwitchTo(RingBuffer *rb, RingBufferMode mode)
-{
-    if (rb == nullptr) {
-        return RB_ERROR_PARAM;
-    }
-    if (mode >= RINGBUFFER_MODE_MAX) {
-        return RB_ERROR_INVALID;
-    }
-    if (rb->mode == mode) {
-        return RB_OK;
-    }
-
-    switch (rb->mode) {
-        case RINGBUFFER_INVALID_MODE:
-        {
-            rb->mode = mode;
-            break;
-        }
-        case RINGBUFFER_CPU_MODE:
-        {
-            rb->mode = mode;
-            break;
-        }
-        case RINGBUFFER_DMA_MODE:
-        {
-            rb->mode = mode;
-            break;
-        }
-        default:
-            return RB_ERROR;
-    }
-
-    return RB_ERROR;
+    return RingBufferModeSwitchTo(rb, RINGBUFFER_INVALID_MODE);
 }
 
 uint32_t RingBufferLenGet(RingBuffer *rb)

@@ -91,8 +91,6 @@ int RingBufferDelete(RingBuffer *rb);
 int RingBufferInit(RingBuffer *rb, uint8_t *buff, uint32_t size);
 int RingBufferDeinit(RingBuffer *rb);
 
-int RingBufferModeSwitchTo(RingBuffer *rb, RingBufferMode mode);
-
 uint32_t RingBufferLenGet(RingBuffer *rb);
 uint32_t RingBufferSizeGet(RingBuffer *rb);
 uint64_t RingBufferTotalInGet(RingBuffer *rb);
