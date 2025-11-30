@@ -64,6 +64,8 @@ typedef struct {
     RB_ADDRESS srcAddr;
     RB_ADDRESS detAddr;
     uint32_t blockSize;
+
+    uint32_t dmaHasCompleted;
 #endif  /* RINGBUFFER_USE_DMA_MODE */
 
 #if RINGBUFFER_USE_RX_OVERFLOW

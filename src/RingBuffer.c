@@ -314,7 +314,19 @@ uint32_t RingBufferGet(RingBuffer *rb, uint8_t *data, uint32_t size)
         return 0;
     }
 
-    len = RingBufferLenGet(rb);
+    if (rb->mode != RINGBUFFER_DMA_MODE) {
+        len = RingBufferLenGet(rb);
+    } else {
+        do {
+            if (rb->dmaHasCompleted) {
+                rb->dmaHasCompleted = 0;
+            }
+            len = RingBufferLenGet(rb);
+            if (!rb->dmaHasCompleted) {
+                break;
+            }
+        } while (1);
+    }
 
     if (len <= 0) {
         _RingBufferOutUnlock(rb);
@@ -370,6 +382,8 @@ int RingBufferDMADeviceRegister(
     rb->detAddr = (uint32_t)(uintptr_t)&rb->buff[0];
     rb->blockSize = 0;
 
+    rb->dmaHasCompleted = 0;
+
     rb->DmaConfig = DmaConfig;
     rb->DmaStart = DmaStart;
     rb->DmaStop = DmaStop;
@@ -394,6 +408,8 @@ int RingBufferDMADeviceUnregister(RingBuffer *rb)
     rb->srcAddr = 0;
     rb->detAddr = 0;
     rb->blockSize = 0;
+
+    rb->dmaHasCompleted = 0;
 
     rb->DmaConfig = nullptr;
     rb->DmaStart = nullptr;
@@ -503,6 +519,8 @@ int RingBufferDMAComplete(RingBuffer *rb)
     }
 
     _RingBufferDMAModeUpdateLen(rb);
+
+    rb->dmaHasCompleted = 1;
 
     rb->detAddr = (uint32_t)(uintptr_t)&rb->buff[rb->tail];
 
