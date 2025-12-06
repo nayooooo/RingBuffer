@@ -61,6 +61,8 @@ typedef struct {
     volatile uint32_t head;
     volatile uint32_t tail;
 
+    volatile uint32_t dataHasPut;
+
     RingBufferMode mode;
     
 #if RINGBUFFER_USE_DMA_MODE
@@ -68,8 +70,6 @@ typedef struct {
     volatile RB_ADDRESS srcAddr;
     volatile RB_ADDRESS detAddr;
     volatile uint32_t blockSize;
-
-    volatile uint32_t dmaHasCompleted;
 #endif  /* RINGBUFFER_USE_DMA_MODE */
 
 #if RINGBUFFER_USE_RX_OVERFLOW
@@ -77,9 +77,6 @@ typedef struct {
 #endif  /* RINGBUFFER_USE_RX_OVERFLOW */
     uint64_t totalIn;
     uint64_t totalOut;
-
-    volatile int inLock;
-    volatile int outLock;
 
 #if RINGBUFFER_USE_DMA_MODE
     RINGBUFFER_DMA_CONFIG DmaConfig;
