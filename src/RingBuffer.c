@@ -381,7 +381,7 @@ int RingBufferDMADeviceRegister(
     if (rb == nullptr) {
         return RB_ERROR_PARAM;
     }
-    if (DmaConfig == nullptr || DmaStart == nullptr || DmaRecvedLen == nullptr) {
+    if (DmaConfig == nullptr || DmaRecvedLen == nullptr) {
         return RB_ERROR_PARAM;
     }
 
@@ -492,6 +492,7 @@ int RingBufferDMAStart(RingBuffer *rb)
 int RingBufferDMAStop(RingBuffer *rb)
 {
     int status;
+    uint32_t len;
 
     if (rb == nullptr || rb->buff == nullptr || rb->size <= 0) {
         return RB_ERROR_PARAM;
@@ -508,6 +509,13 @@ int RingBufferDMAStop(RingBuffer *rb)
     }
 
     _RingBufferDMAModeUpdateLen(rb);
+
+    if (rb->DmaRecvedLen) {
+        len = rb->DmaRecvedLen();
+        if (len < rb->blockSize) {
+            rb->totalIn += len;
+        }
+    }
 
     rb->dmaState = RINGBUFFER_DMA_READY;
 
