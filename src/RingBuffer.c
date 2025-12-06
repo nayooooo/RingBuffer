@@ -8,9 +8,16 @@
 #endif
 #endif
 
-#ifndef uintptr_t
-typedef unsigned long long uintptr_t;
+uint32_t RingBufferLibraryBit(void)
+{
+#if _WIN64
+    return 64;
+#elif _WIN32
+    return 32;
+#else
+    return 0;
 #endif
+}
 
 static int _RingBufferInLock(RingBuffer *rb)
 {
@@ -111,7 +118,7 @@ static void _RingBufferDMAModeUpdateLen(RingBuffer *rb)
             return;
         }
 
-        rb->tail = (rb->detAddr - (uint32_t)(uintptr_t)&rb->buff[0] + recvedLen) % rb->size;
+        rb->tail = (rb->detAddr - (RB_ADDRESS)&rb->buff[0] + recvedLen) % rb->size;
 
         _RingBufferInUnlock(rb);
     }
@@ -281,14 +288,14 @@ uint32_t RingBufferPut(RingBuffer *rb, uint8_t *data, uint32_t size)
     if (rb->tail + size <= rb->size) {
         RB_MEMCPY(&rb->buff[rb->tail], &data[0], size);
         if (rb->CleanCache) {
-            rb->CleanCache((uint32_t)(uintptr_t)&rb->buff[rb->tail], size);
+            rb->CleanCache((RB_ADDRESS)&rb->buff[rb->tail], size);
         }
     } else {
         RB_MEMCPY(&rb->buff[rb->tail], &data[0], rb->size - rb->tail);
         RB_MEMCPY(&rb->buff[0], &data[rb->size - rb->tail], size - (rb->size - rb->tail));
         if (rb->CleanCache) {
-            rb->CleanCache((uint32_t)(uintptr_t)&rb->buff[rb->tail], rb->size - rb->tail);
-            rb->CleanCache((uint32_t)(uintptr_t)&rb->buff[0], size - (rb->size - rb->tail));
+            rb->CleanCache((RB_ADDRESS)&rb->buff[rb->tail], rb->size - rb->tail);
+            rb->CleanCache((RB_ADDRESS)&rb->buff[0], size - (rb->size - rb->tail));
         }
     }
     rb->tail = (rb->tail + size) % rb->size;
@@ -339,13 +346,13 @@ uint32_t RingBufferGet(RingBuffer *rb, uint8_t *data, uint32_t size)
 
     if (rb->head + size <= rb->size) {
         if (rb->InvalidCache) {
-            rb->InvalidCache((uint32_t)(uintptr_t)&rb->buff[rb->head], size);
+            rb->InvalidCache((RB_ADDRESS)&rb->buff[rb->head], size);
         }
         RB_MEMCPY(&data[0], &rb->buff[rb->head], size);
     } else {
         if (rb->InvalidCache) {
-            rb->InvalidCache((uint32_t)(uintptr_t)&rb->buff[rb->head], rb->size - rb->head);
-            rb->InvalidCache((uint32_t)(uintptr_t)&rb->buff[0], size - (rb->size - rb->head));
+            rb->InvalidCache((RB_ADDRESS)&rb->buff[rb->head], rb->size - rb->head);
+            rb->InvalidCache((RB_ADDRESS)&rb->buff[0], size - (rb->size - rb->head));
         }
         RB_MEMCPY(&data[0], &rb->buff[rb->head], rb->size - rb->head);
         RB_MEMCPY(&data[rb->size - rb->head], &rb->buff[0], size - (rb->size - rb->head));
@@ -360,6 +367,7 @@ uint32_t RingBufferGet(RingBuffer *rb, uint8_t *data, uint32_t size)
 
 #if RINGBUFFER_USE_DMA_MODE
 
+#include <stdio.h>
 int RingBufferDMADeviceRegister(
     RingBuffer *rb,
     RINGBUFFER_DMA_CONFIG DmaConfig,
@@ -379,7 +387,7 @@ int RingBufferDMADeviceRegister(
 
     rb->dmaState = RINGBUFFER_DMA_IDLE;
     rb->srcAddr = 0;
-    rb->detAddr = (uint32_t)(uintptr_t)&rb->buff[0];
+    rb->detAddr = (RB_ADDRESS)&rb->buff[0];
     rb->blockSize = 0;
 
     rb->dmaHasCompleted = 0;
@@ -520,11 +528,19 @@ int RingBufferDMAComplete(RingBuffer *rb)
 
     _RingBufferDMAModeUpdateLen(rb);
 
+    if (_RingBufferInLock(rb) != RB_OK) {
+        return RB_ERROR;
+    }
+
     rb->dmaHasCompleted = 1;
 
-    rb->detAddr = (uint32_t)(uintptr_t)&rb->buff[rb->tail];
+    rb->detAddr = (RB_ADDRESS)&rb->buff[rb->tail];
+
+    rb->totalIn += rb->blockSize;
 
     rb->dmaState = RINGBUFFER_DMA_READY;
+
+    _RingBufferInUnlock(rb);
 
     return RB_OK;
 }

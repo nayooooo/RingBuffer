@@ -12,7 +12,11 @@ extern "C" {
 #include "port/port.h"
 
 #ifndef RB_ADDRESS
+#if _WIN64
+#define RB_ADDRESS uint64_t
+#else
 #define RB_ADDRESS uint32_t
+#endif
 #endif
 
 #define RB_OK                  0
@@ -54,18 +58,18 @@ typedef struct {
     uint8_t *buff;
     uint32_t size;
 
-    uint32_t head;
-    uint32_t tail;
+    volatile uint32_t head;
+    volatile uint32_t tail;
 
     RingBufferMode mode;
     
 #if RINGBUFFER_USE_DMA_MODE
-    RingBufferDMAState dmaState;
-    RB_ADDRESS srcAddr;
-    RB_ADDRESS detAddr;
-    uint32_t blockSize;
+    volatile RingBufferDMAState dmaState;
+    volatile RB_ADDRESS srcAddr;
+    volatile RB_ADDRESS detAddr;
+    volatile uint32_t blockSize;
 
-    uint32_t dmaHasCompleted;
+    volatile uint32_t dmaHasCompleted;
 #endif  /* RINGBUFFER_USE_DMA_MODE */
 
 #if RINGBUFFER_USE_RX_OVERFLOW
@@ -87,6 +91,8 @@ typedef struct {
     RINGBUFFER_INVALID_CHCHE InvalidCache;
 #endif  /* RINGBUFFER_USE_DMA_MODE */
 } RingBuffer;
+
+uint32_t RingBufferLibraryBit(void);
 
 int RingBufferCreate(RingBuffer *rb, uint32_t size);
 int RingBufferDelete(RingBuffer *rb);

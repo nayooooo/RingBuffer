@@ -6,6 +6,7 @@
         "port.h": "c",
         "cstdlib": "c",
         "compare": "c",
-        "ringbuffer.h": "c"
+        "ringbuffer.h": "c",
+        "ringbuffer_cfg.h": "c"
     }
 }
