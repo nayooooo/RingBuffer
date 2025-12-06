@@ -103,6 +103,7 @@ uint32_t RingBufferLenGet(RingBuffer *rb);
 uint32_t RingBufferSizeGet(RingBuffer *rb);
 uint64_t RingBufferTotalInGet(RingBuffer *rb);
 uint64_t RingBufferTotalOutGet(RingBuffer *rb);
+uint64_t RingBufferOverflowTimesGet(RingBuffer *rb);
 
 uint32_t RingBufferPut(RingBuffer *rb, uint8_t *data, uint32_t size);
 uint32_t RingBufferGet(RingBuffer *rb, uint8_t *data, uint32_t size);

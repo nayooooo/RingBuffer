@@ -124,6 +124,19 @@ static void _RingBufferDMAModeUpdateLen(RingBuffer *rb)
     }
 }
 
+#if RINGBUFFER_USE_RX_OVERFLOW
+
+static int _RingBufferDMAModeCheckOverflow(RingBuffer *rb)
+{
+    if (rb->totalIn - rb->totalOut > rb->size) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+#endif  /* RINGBUFFER_USE_RX_OVERFLOW */
+
 #endif  /* RINGBUFFER_USE_DMA_MODE */
 
 int RingBufferCreate(RingBuffer *rb, uint32_t size)
@@ -251,6 +264,15 @@ uint64_t RingBufferTotalOutGet(RingBuffer *rb)
     }
 
     return rb->totalOut;
+}
+
+uint64_t RingBufferOverflowTimesGet(RingBuffer *rb)
+{
+    if (rb == nullptr) {
+        return 0;
+    }
+
+    return rb->overflowTimes;
 }
 
 uint32_t RingBufferPut(RingBuffer *rb, uint8_t *data, uint32_t size)
@@ -514,6 +536,11 @@ int RingBufferDMAStop(RingBuffer *rb)
         len = rb->DmaRecvedLen();
         if (len < rb->blockSize) {
             rb->totalIn += len;
+#if RINGBUFFER_USE_RX_OVERFLOW
+            if (_RingBufferDMAModeCheckOverflow(rb)) {
+                rb->overflowTimes++;
+            }
+#endif
         }
     }
 
@@ -545,6 +572,11 @@ int RingBufferDMAComplete(RingBuffer *rb)
     rb->detAddr = (RB_ADDRESS)&rb->buff[rb->tail];
 
     rb->totalIn += rb->blockSize;
+#if RINGBUFFER_USE_RX_OVERFLOW
+    if (_RingBufferDMAModeCheckOverflow(rb)) {
+        rb->overflowTimes++;
+    }
+#endif
 
     rb->dmaState = RINGBUFFER_DMA_READY;
 
