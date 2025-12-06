@@ -437,7 +437,7 @@ int RingBufferDMAConfig(RingBuffer *rb, RB_ADDRESS src, uint32_t size)
     if (rb->mode != RINGBUFFER_DMA_MODE) {
         return RB_ERROR_PARAM;
     }
-    if ((rb->dmaState != RINGBUFFER_DMA_READY) || (rb->dmaState != RINGBUFFER_DMA_IDLE)) {
+    if ((rb->dmaState != RINGBUFFER_DMA_READY) && (rb->dmaState != RINGBUFFER_DMA_IDLE)) {
         return RB_ERROR_INVALID;
     }
 
