@@ -11,14 +11,15 @@
 #   define BIT(n) (1UL << (n))
 #endif  // !BIT
 
-#define TEST_TOTAL_BYTE                     (10000000)
+#define TEST_TOTAL_BYTE                     (100000000)
 #define TEST_DMA_BLOCK_SIZE                 (4095)
-#define TEST_RINGBUFFER_SIZE                (2 * TEST_DMA_BLOCK_SIZE)
+// #define TEST_RINGBUFFER_SIZE                (2 * TEST_DMA_BLOCK_SIZE)
+#define TEST_RINGBUFFER_SIZE                (4 * TEST_DMA_BLOCK_SIZE)
 
-#define DMA_RECV_100KB_TIME_MS              (500)
-#define TEST_DMA_RECV_100KB_TIME_MS         (DMA_RECV_100KB_TIME_MS)
+// #define TEST_CPU_READ_ONE_BLOCK_TIME_MS     (21)
+#define TEST_CPU_READ_ONE_BLOCK_TIME_MS     (3)
 
-#if (TEST_TOTAL_BYTE > 10000000)
+#if (TEST_TOTAL_BYTE > 100000000)
 #error too large!
 #endif
 
@@ -96,14 +97,14 @@ DWORD WINAPI cpu_thread(LPVOID lpParam)
 
     (void)lpParam;
 
-#if USE_DEBUG
-    QueryPerformanceCounter(&start);
-#endif
-
     while (!cpu_read_thread_running) {
         Sleep(10);
     }
     printf("cpu thread start to read\n");
+
+#if USE_DEBUG
+    QueryPerformanceCounter(&start);
+#endif
 
     while (cpuReadToalLen < TEST_TOTAL_BYTE) {
         len = RingBufferGet(&rb, &readBuffer[cpuReadToalLen], TEST_TOTAL_BYTE - cpuReadToalLen);
@@ -115,7 +116,7 @@ DWORD WINAPI cpu_thread(LPVOID lpParam)
         }
 
 #if USE_DEBUG
-        if (cpuReadToalLen >= 100000 && cpuReadToalLen < 105000) {
+        if (cpuReadToalLen >= 100000 && cpuReadToalLen < 110000) {
             QueryPerformanceCounter(&end);
             printf("\ncpu read 10 W byte use time: %.3lf ms\n",
                    (end.QuadPart - start.QuadPart) * 1000.0 / frequency.QuadPart);
@@ -148,11 +149,11 @@ DWORD WINAPI dma_thread(LPVOID lpParam)
 
     (void)lpParam;
 
+    printf("dma thread start to recv\n");
+
 #if USE_DEBUG
     QueryPerformanceCounter(&start);
 #endif
-
-    printf("dma thread start to recv\n");
 
     while (dmaRecvTotalLen < TEST_TOTAL_BYTE) {
         if (dmaRecvTotalLen % TEST_DMA_BLOCK_SIZE == 0) {
@@ -174,14 +175,9 @@ DWORD WINAPI dma_thread(LPVOID lpParam)
         recvedLen++;
 
         if (recvedLen == TEST_DMA_BLOCK_SIZE) {
-            do {
-                status = RingBufferDMAComplete(&rb);
-                if (status) {
-                    Sleep(0);
-                }
-            } while (status);
+            RingBufferDMAComplete(&rb);
             recvedLen = 0;
-            Sleep((DWORD)(1.0 * TEST_DMA_RECV_100KB_TIME_MS / (100000 / TEST_DMA_BLOCK_SIZE)));
+            Sleep(TEST_CPU_READ_ONE_BLOCK_TIME_MS);
         }
 
 #if USE_DEBUG
@@ -202,9 +198,9 @@ DWORD WINAPI dma_thread(LPVOID lpParam)
 
 DWORD WINAPI monitor_thread_entry(LPVOID lpParam)
 {
-    uint64_t last_delta = 0;
-    uint64_t max_delta = 0;
-    uint64_t min_delta = 0xFFFFFFFFFFFFFFFFULL;
+    int64_t last_delta = 0;
+    int64_t max_delta = 0;
+    int64_t min_delta = 0xFFFFFFFFFFFFFFFFULL;
 
     (void)lpParam;
 
@@ -213,15 +209,15 @@ DWORD WINAPI monitor_thread_entry(LPVOID lpParam)
     }
 
     do {
-        printf("\033[2K\r delta(%u%s) %s, cpu %u/%u dma %u/%u",
-               dmaRecvTotalLen - cpuReadToalLen,
+        printf("\033[2K\r cpu %u/%u dma %u/%u, delta(%lld%s) %s",
+               cpuReadToalLen, TEST_TOTAL_BYTE,
+               dmaRecvTotalLen, TEST_TOTAL_BYTE,
+               (int64_t)dmaRecvTotalLen - (int64_t)cpuReadToalLen,
                (dmaRecvTotalLen - cpuReadToalLen >= TEST_RINGBUFFER_SIZE) ? ", error" : "",
                (dmaRecvTotalLen - cpuReadToalLen > last_delta) ? "up" :
-               (dmaRecvTotalLen - cpuReadToalLen < last_delta) ? "down" : "==",
-               cpuReadToalLen, TEST_TOTAL_BYTE,
-               dmaRecvTotalLen, TEST_TOTAL_BYTE);
+               (dmaRecvTotalLen - cpuReadToalLen < last_delta) ? "down" : "==");
 
-        last_delta = dmaRecvTotalLen - cpuReadToalLen;
+        last_delta = (int64_t)dmaRecvTotalLen - (int64_t)cpuReadToalLen;
         if (min_delta > last_delta) {
             min_delta = last_delta;
         }
@@ -242,6 +238,9 @@ DWORD WINAPI monitor_thread_entry(LPVOID lpParam)
 int main(void)
 {
     int status;
+    LARGE_INTEGER frequency, start, end;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
 
     status = (int)RingBufferLibraryBit();
 #if _WIN64
@@ -289,8 +288,8 @@ int main(void)
         printf("monitor thread put into core %d failed!\n", MONITOR_THREAD_ATTR_CORE);
         return -3;
     }
+    SetThreadPriority(monitor_thread, THREAD_PRIORITY_NORMAL);
 
-    cpu_read_thread_running = 1;
     threads[0] = CreateThread(NULL, 0, cpu_thread, NULL, 0, NULL);
     if (threads[0] == NULL) {
         printf("cpu thread create failed!\n");
@@ -303,7 +302,8 @@ int main(void)
         printf("cpu thread put into core %d failed!\n", CPU_THREAD_ATTR_CORE);
         return -3;
     }
-    SetThreadPriority(threads[0], THREAD_PRIORITY_NORMAL);
+    SetThreadPriority(threads[0], THREAD_PRIORITY_ABOVE_NORMAL);
+    cpu_read_thread_running = 1;
 
     threads[1] = CreateThread(NULL, 0, dma_thread, NULL, 0, NULL);
     if (threads[1] == NULL) {
@@ -317,7 +317,7 @@ int main(void)
         printf("dma thread put into core %d failed!\n", DMA_THREAD_ATTR_CORE);
         return -3;
     }
-    SetThreadPriority(threads[1], THREAD_PRIORITY_ABOVE_NORMAL);
+    SetThreadPriority(threads[1], THREAD_PRIORITY_HIGHEST);
 
     monitor_thread_running = 1;
 
@@ -334,6 +334,9 @@ int main(void)
         }
     }
     printf("cpu thread complete!\n");
+    QueryPerformanceCounter(&end);
+    printf("\nspeed: %.3lf MB/s\n",
+           (1.0 * TEST_TOTAL_BYTE / 1000000) / ((end.QuadPart - start.QuadPart) / frequency.QuadPart));
 
     monitor_thread_running = 0;
     status = (int)WaitForMultipleObjects(1, &monitor_thread, TRUE, 2000);
