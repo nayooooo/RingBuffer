@@ -4,12 +4,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 #include <intrin.h>  // For memory barrier intrinsics
 
 // Test parameters
 #define TOTAL_DATA_SIZE (1024ULL * 1024 * 1024 * 1024)  // 1TB
 #define BUFFER_SIZE     (1024 * 1024)         // 1MB buffer
 #define CHUNK_SIZE      (64   * 1024)         // 64KB chunk size for better throughput
+static uint8_t RAND;
 
 // Global variables
 static RingBuffer g_rb;
@@ -37,17 +39,31 @@ static LARGE_INTEGER g_endTime;
 #define COMPILER_BARRIER() _ReadWriteBarrier()
 #define MEMORY_BARRIER() MemoryBarrier()
 
+static void printInfo(RingBuffer *rb, const char *tag)
+{
+    if (tag != NULL) {
+        printf("%s:\n", tag);
+    } else {
+        printf("(no name)\n");
+    }
+    printf("ring buffer len %u\n", RingBufferLenGet(rb));
+    printf("ring buffer size %u\n", RingBufferSizeGet(rb));
+    printf("ring buffer total in %llu\n", RingBufferTotalInGet(rb));
+    printf("ring buffer total out %llu\n", RingBufferTotalOutGet(rb));
+    printf("overflowTimes = %llu\n", RingBufferOverflowTimesGet(rb));
+}
+
 // Generate test data chunk
 void generate_test_data(uint8_t *data, uint32_t size, uint32_t pattern) {
     for (uint32_t i = 0; i < size; i++) {
-        data[i] = (uint8_t)((pattern + i) & 0xFF);
+        data[i] = (uint8_t)((pattern + i + RAND) & 0xFF);
     }
 }
 
 // Verify data
 bool verify_data(const uint8_t *data, uint32_t size, uint32_t expected_pattern) {
     for (uint32_t i = 0; i < size; i++) {
-        uint8_t expected = (uint8_t)((expected_pattern + i) & 0xFF);
+        uint8_t expected = (uint8_t)((expected_pattern + i + RAND) & 0xFF);
         if (data[i] != expected) {
             return false;
         }
@@ -290,6 +306,9 @@ double get_elapsed_ms(LARGE_INTEGER start, LARGE_INTEGER end) {
 }
 
 int main() {
+    srand(time(NULL));
+    RAND = (uint8_t)rand();
+
     printf("Lock-Free Ring Buffer Test Program\n");
     printf("Test size: %llu bytes (%llu GB)\n", TOTAL_DATA_SIZE, TOTAL_DATA_SIZE / (1024 * 1024 * 1024));
     printf("Buffer size: %u bytes\n", BUFFER_SIZE);
@@ -372,6 +391,7 @@ int main() {
     WaitForSingleObject(g_hMonitorThread, 2000);
 
     // Cleanup
+    printInfo(&g_rb, "\nafter test");
     printf("\nCleaning up resources...\n");
     RingBufferDelete(&g_rb);
 
