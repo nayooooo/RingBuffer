@@ -7,7 +7,7 @@
 #include <intrin.h>  // For memory barrier intrinsics
 
 // Test parameters
-#define TOTAL_DATA_SIZE (1024ULL * 1024 * 1024 * 1024)  // 1GB
+#define TOTAL_DATA_SIZE (1024ULL * 1024 * 1024 * 1024)  // 1TB
 #define BUFFER_SIZE     (1024 * 1024)         // 1MB buffer
 #define CHUNK_SIZE      (64   * 1024)         // 64KB chunk size for better throughput
 
@@ -291,7 +291,7 @@ double get_elapsed_ms(LARGE_INTEGER start, LARGE_INTEGER end) {
 
 int main() {
     printf("Lock-Free Ring Buffer Test Program\n");
-    printf("Test size: %llu bytes (%llu MB)\n", TOTAL_DATA_SIZE, TOTAL_DATA_SIZE / (1024 * 1024));
+    printf("Test size: %llu bytes (%llu GB)\n", TOTAL_DATA_SIZE, TOTAL_DATA_SIZE / (1024 * 1024 * 1024));
     printf("Buffer size: %u bytes\n", BUFFER_SIZE);
     printf("Chunk size: %u bytes\n", CHUNK_SIZE);
     printf("\n");
