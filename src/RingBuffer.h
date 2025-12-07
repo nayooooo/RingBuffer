@@ -123,6 +123,9 @@ int RingBufferDMAStart(RingBuffer *rb);
 int RingBufferDMAStop(RingBuffer *rb);
 int RingBufferDMAComplete(RingBuffer *rb);  // Call at dma complete irq
 
+uint32_t RingBufferTailToRightBorderLenGet(RingBuffer *rb);
+int RingBufferDataCrossedRightBorder(RingBuffer *rb);
+
 #endif  /* RINGBUFFER_USE_DMA_MODE */
 
 #ifdef __cplusplus

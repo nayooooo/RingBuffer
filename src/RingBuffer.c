@@ -509,4 +509,22 @@ int RingBufferDMAComplete(RingBuffer *rb)
     return RB_OK;
 }
 
+uint32_t RingBufferTailToRightBorderLenGet(RingBuffer *rb)
+{
+    if (rb == nullptr || rb->buff == nullptr || rb->size <= 0) {
+        return RB_ERROR;
+    }
+
+    return (rb->size - rb->tail);
+}
+
+int RingBufferDataCrossedRightBorder(RingBuffer *rb)
+{
+    if (rb == nullptr || rb->buff == nullptr || rb->size <= 0) {
+        return RB_ERROR;
+    }
+
+    return (rb->tail < rb->head);
+}
+
 #endif  /* RINGBUFFER_USE_DMA_MODE */
