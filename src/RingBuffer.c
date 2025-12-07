@@ -278,15 +278,19 @@ uint32_t RingBufferGet(RingBuffer *rb, uint8_t *data, uint32_t size)
         return 0;
     }
 
+#if RINGBUFFER_USE_LATEST_LEN
     do {
         if (rb->dataHasPut) {
             rb->dataHasPut = 0;
         }
+#endif  /* RINGBUFFER_USE_LATEST_LEN */
         len = RingBufferLenGet(rb);
+#if RINGBUFFER_USE_LATEST_LEN
         if (!rb->dataHasPut) {
             break;
         }
     } while (1);
+#endif  /* RINGBUFFER_USE_LATEST_LEN */
 
     if (len <= 0) {
         return 0;
