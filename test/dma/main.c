@@ -4,15 +4,18 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 #include <intrin.h>  // For memory barrier intrinsics
 
 // Test parameters
 #define TOTAL_DATA_SIZE (1ULL * 1024 * 1024 * 1024)  // 1GB
-#define BUFFER_SIZE     (1024 * 1024)         // 1MB buffer
-#define CHUNK_SIZE      (64   * 1024)         // 64KB chunk size for better throughput
+#define BUFFER_SIZE     (1 * 1024 * 1024)            // 1MB buffer
+#define CHUNK_SIZE      (64 * 1024)                  // 64KB chunk size for better throughput
+static uint8_t RAND;
 
 // Global variables
 static RingBuffer g_rb;
+static CRITICAL_SECTION g_cs;
 static HANDLE g_hProducerThread = NULL;
 static HANDLE g_hConsumerThread = NULL;
 static HANDLE g_hMonitorThread = NULL;
@@ -37,11 +40,25 @@ static LARGE_INTEGER g_endTime;
 #define COMPILER_BARRIER() _ReadWriteBarrier()
 #define MEMORY_BARRIER() MemoryBarrier()
 
+static void printInfo(RingBuffer *rb, const char *tag)
+{
+    if (tag != NULL) {
+        printf("%s:\n", tag);
+    } else {
+        printf("(no name)\n");
+    }
+    printf("ring buffer len %u\n", RingBufferLenGet(rb));
+    printf("ring buffer size %u\n", RingBufferSizeGet(rb));
+    printf("ring buffer total in %llu\n", RingBufferTotalInGet(rb));
+    printf("ring buffer total out %llu\n", RingBufferTotalOutGet(rb));
+    printf("overflowTimes = %llu\n", RingBufferOverflowTimesGet(rb));
+}
+
 // Ringbuffer dma mode parameter
-static RB_ADDRESS g_srcAddr = 0;
-static RB_ADDRESS g_detAddr = 0;
-static uint32_t g_blocksize = 0;
-static uint32_t g_recvedLen = 0;
+static volatile RB_ADDRESS g_srcAddr = 0;
+static volatile RB_ADDRESS g_detAddr = 0;
+static volatile uint32_t g_blocksize = 0;
+static volatile uint32_t g_recvedLen = 0;
 
 static int rb_dma_config(RB_ADDRESS src, RB_ADDRESS det, uint32_t size)
 {
@@ -59,14 +76,14 @@ static uint32_t rb_dma_recved_len(void)
 // Generate test data chunk
 void generate_test_data(uint8_t *data, uint32_t size, uint32_t pattern) {
     for (uint32_t i = 0; i < size; i++) {
-        data[i] = (uint8_t)((pattern + i) & 0xFF);
+        data[i] = (uint8_t)((pattern + i + RAND) & 0xFF);
     }
 }
 
 // Verify data
 bool verify_data(const uint8_t *data, uint32_t size, uint32_t expected_pattern) {
     for (uint32_t i = 0; i < size; i++) {
-        uint8_t expected = (uint8_t)((expected_pattern + i) & 0xFF);
+        uint8_t expected = (uint8_t)((expected_pattern + i + RAND) & 0xFF);
         if (data[i] != expected) {
             return false;
         }
@@ -92,7 +109,7 @@ DWORD WINAPI producer_thread(LPVOID lpParam) {
     uint32_t local_pattern = 0;
 
     while (local_produced < TOTAL_DATA_SIZE) {
-        if (RingBufferSizeGet(&g_rb) - RingBufferLenGet(&g_rb) < CHUNK_SIZE) {
+        if (RingBufferSizeGet(&g_rb) - RingBufferLenGet(&g_rb) - 1 < CHUNK_SIZE) {
             // Buffer full, yield to other threads
             SwitchToThread();
             continue;
@@ -132,6 +149,7 @@ DWORD WINAPI producer_thread(LPVOID lpParam) {
         g_expectedPattern = local_pattern;
 
         // Complete dma
+        EnterCriticalSection(&g_cs);
         do {
             status = RingBufferDMAComplete(&g_rb);
             if (status) {
@@ -143,6 +161,7 @@ DWORD WINAPI producer_thread(LPVOID lpParam) {
                 break;
             }
         } while (1);
+        LeaveCriticalSection(&g_cs);
     }
 
     free(data_buffer);
@@ -178,25 +197,10 @@ DWORD WINAPI consumer_thread(LPVOID lpParam) {
 
         // Try to read from buffer in a lock-free manner
         while (to_read > 0) {
-            // Get current buffer length (atomic read)
-            uint32_t buffer_len = RingBufferLenGet(&g_rb);
-
-            if (buffer_len == 0) {
-                // Check if producer is done
-                MEMORY_BARRIER();
-                if (g_producerFinished && buffer_len == 0) {
-                    break;
-                }
-
-                // Buffer empty, yield to other threads
-                SwitchToThread();
-                continue;
-            }
-
-            uint32_t read_size = (to_read < buffer_len) ? to_read : buffer_len;
-
             // Read from buffer (RingBufferGet is thread-safe for single consumer)
-            uint32_t read = RingBufferGet(&g_rb, data_buffer + (CHUNK_SIZE - to_read), read_size);
+            EnterCriticalSection(&g_cs);
+            uint32_t read = RingBufferGet(&g_rb, data_buffer + (CHUNK_SIZE - to_read), to_read);
+            LeaveCriticalSection(&g_cs);
 
             if (read > 0) {
                 // Verify data
@@ -212,12 +216,9 @@ DWORD WINAPI consumer_thread(LPVOID lpParam) {
                 MEMORY_BARRIER();
                 g_totalConsumed = local_consumed;
                 COMPILER_BARRIER();
+            } else {
+                SwitchToThread();
             }
-        }
-
-        // Small sleep to prevent CPU hogging
-        if (to_read == CHUNK_SIZE) {
-            Sleep(0);
         }
     }
 
@@ -324,6 +325,9 @@ double get_elapsed_ms(LARGE_INTEGER start, LARGE_INTEGER end) {
 }
 
 int main() {
+    srand(time(NULL));
+    RAND = (uint8_t)rand();
+
     printf("Lock-Free Ring Buffer Test Program\n");
     printf("Test size: %llu bytes (%llu GB)\n", TOTAL_DATA_SIZE, TOTAL_DATA_SIZE / (1024 * 1024 * 1024));
     printf("Buffer size: %u bytes\n", BUFFER_SIZE);
@@ -353,6 +357,10 @@ int main() {
 
     // Record start time
     QueryPerformanceCounter(&g_startTime);
+
+    // Create threads
+    printf("Creating critical section...\n");
+    InitializeCriticalSection(&g_cs);
 
     // Create threads
     printf("Creating threads...\n");
@@ -398,14 +406,14 @@ int main() {
     SetThreadPriority(g_hMonitorThread, THREAD_PRIORITY_BELOW_NORMAL);
 
     // Start threads
-    ResumeThread(g_hProducerThread);
     ResumeThread(g_hConsumerThread);
+    ResumeThread(g_hProducerThread);
     ResumeThread(g_hMonitorThread);
 
     // Wait for threads to complete
     printf("\nRunning test...\n");
     WaitForSingleObject(g_hProducerThread, INFINITE);
-    WaitForSingleObject(g_hConsumerThread, INFINITE);
+    WaitForSingleObject(g_hConsumerThread, 5000);
 
     // Record end time
     QueryPerformanceCounter(&g_endTime);
@@ -415,12 +423,14 @@ int main() {
     WaitForSingleObject(g_hMonitorThread, 2000);
 
     // Cleanup
+    printInfo(&g_rb, "\nafter test");
     printf("\nCleaning up resources...\n");
     RingBufferDelete(&g_rb);
 
     CloseHandle(g_hProducerThread);
     CloseHandle(g_hConsumerThread);
     CloseHandle(g_hMonitorThread);
+    DeleteCriticalSection(&g_cs);
 
     // Get final values with memory barriers
     MEMORY_BARRIER();
@@ -459,6 +469,8 @@ int main() {
             printf("  Reason: Consumer data amount incorrect\n");
         }
     }
+
+    system("pause");
 
     return 0;
 }
